@@ -1,0 +1,80 @@
+--!strict
+--!native
+-- The plugin byte builders the suite's load orders are made of, copied from tes3cmd's suite
+-- (`tests/fixtures.luau` there), which spells the synthetic plugins of jess's CLI tests the same
+-- way.
+
+local function u32(value: number): string return string.pack('<I4', value) end
+
+local function f32(value: number): string return string.pack('<f', value) end
+
+local function subrecord(tag: string, payload: string): string
+  return tag .. u32(#payload) .. payload
+end
+
+local function record(tag: string, payload: string, flags: number?): string
+  return tag .. u32(#payload) .. u32(0) .. u32(flags or 0) .. payload
+end
+
+local function fixed(text: string, length: number): string
+  return text .. string.rep('\0', length - #text)
+end
+
+local function hedr(count: number, fileType: number?): string
+  return subrecord(
+    'HEDR',
+    f32(1.3) .. u32(fileType or 0) .. fixed('test', 32) .. fixed('synthetic', 256) .. u32(count)
+  )
+end
+
+local function masterEntry(name: string, size: number): string
+  return subrecord('MAST', name .. '\0') .. subrecord('DATA', string.pack('<I8', size))
+end
+
+local function header(count: number, masters: { { name: string, size: number } }?): string
+  local parts = { hedr(count) }
+  for _, master in masters or {} do
+    table.insert(parts, masterEntry(master.name, master.size))
+  end
+
+  return record('TES3', table.concat(parts))
+end
+
+--- A plugin of `records`, naming `masters`.
+local function plugin(records: { string }, masters: { { name: string, size: number } }?): string
+  return header(#records, masters) .. table.concat(records)
+end
+
+--- A light with nothing but its id, which is written as the bytes given.
+local function light(id: string): string
+  return record(
+    'LIGH',
+    subrecord('NAME', id .. '\0') .. subrecord('LHDT', string.pack('<fIiIBBBBI', 1, 5, 10, 100, 255, 160, 60, 0, 1))
+  )
+end
+
+local function static(id: string): string
+  return record('STAT', subrecord('NAME', id .. '\0') .. subrecord('MODL', id .. '.nif\0'))
+end
+
+--- An interior cell holding one object.
+local function cell(name: string): string
+  return record(
+    'CELL',
+    subrecord('NAME', name .. '\0')
+      .. subrecord('DATA', u32(1) .. u32(0) .. u32(0))
+      .. subrecord('NAM0', u32(1))
+      .. subrecord('FRMR', u32(1))
+      .. subrecord('NAME', 'rock\0')
+      .. subrecord('DATA', string.rep('\0', 24))
+  )
+end
+
+return table.freeze {
+  cell = cell,
+  light = light,
+  plugin = plugin,
+  record = record,
+  static = static,
+  subrecord = subrecord,
+}
