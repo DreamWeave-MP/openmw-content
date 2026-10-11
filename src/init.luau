@@ -1,0 +1,241 @@
+--!strict
+--!native
+-- SPDX-License-Identifier: MIT OR Apache-2.0
+
+--[[
+A load order, opened: what a tool that works over an OpenMW configuration's content files needs
+from underneath it. `open` reads the content files an `@openmw` Context lists, in load order and
+in the configuration's code page, and reports the ones that don't open instead of stopping at
+them; `masters` says where each master a plugin names is in an order; `outputDirectory` is where a
+plugin a tool generates goes; and `activate` adds one to the configuration's content.
+
+The Context is taken by its shape, so this depends on `@tes3` alone, and a tool that has its
+files some other way can hand `open` the entries itself. Content files are read from the paths the
+Context resolved them to, through `@dream/fs`, which needs the `filesystem.read` capability.
+Nothing here writes a file: a tool writes its own plugin, and the Context saves its own
+configuration (`context:save()`).
+]]
+
+local fs = require '@dream/fs'
+local tes3 = require '@tes3'
+
+--- A content file as an `@openmw` Context lists one: its name as `content=` spells it, and the
+--- file a data folder has for it, if one does.
+export type Content = { name: string, path: string? }
+
+--- What this uses of an `@openmw` Context, named here so opening a load order doesn't depend on
+--- the VFS and archives behind one. `Self` is the whole Context: its methods take it as their
+--- receiver, and the checker rejects a Context where they are declared to take anything narrower.
+type Context<Self> = {
+  read encoding: string?,
+  read writableDataDir: string?,
+  read content: (self: Self) -> { Content },
+  read activate: (self: Self, name: string, options: { force: boolean? }?) -> boolean,
+}
+
+export type OpenOptions = {
+  --- The content files to open, in the order to open them. By default the Context's content, in
+  --- load order, without the `.omwscripts` files it also lists, which hold no records.
+  entries: { Content }?,
+  --- The code page the files' text is read in; the configuration's `encoding=` by default, else
+  --- `win1252`.
+  encoding: string?,
+  --- Keep only these record types (tags like `LIGH`, or type names like `Light`) and the TES3
+  --- header. A plugin opened this way can't be saved whole.
+  types: { string }?,
+  --- Which parts of each CELL to read, both by default: `{ references = false }` reads a cell's
+  --- name, data, and lighting without the objects in it.
+  cell: tes3.CellParts?,
+}
+
+--- A content file that opened.
+export type Loaded = {
+  --- The file's name, as its entry spells it.
+  name: string,
+  path: string,
+  --- The file's size in bytes: what a plugin that names it as a master records.
+  size: number,
+  plugin: tes3.Plugin,
+}
+
+--- A content file that didn't open, and why: no data folder has it (`path` is nil), it can't be
+--- read, or its bytes aren't a plugin's.
+export type Failure = { name: string, path: string?, problem: string }
+
+export type LoadOrder = {
+  --- The code page the plugins were read in.
+  encoding: string,
+  --- The files that opened, in the order asked for.
+  plugins: { Loaded },
+  --- The files that didn't, in the order asked for.
+  failures: { Failure },
+}
+
+--- A master a plugin names: the name and size its header records, and where that file is in a
+--- load order (1-based), or nil when it isn't in it.
+export type Master = { name: string, size: number, position: number? }
+
+local OpenKeys: { [string]: boolean } = { cell = true, encoding = true, entries = true, types = true }
+
+local function isScriptList(name: string): boolean
+  return string.find(string.lower(name), '%.omwscripts$') ~= nil
+end
+
+--- A record type's tag: from a tag (`LIGH`, `npc` for `NPC_`) or a type name (`Light`) in any
+--- case, as selectors take them; any other four characters are a tag, for types `@tes3` doesn't
+--- model.
+local function recordType(value: string): string
+  if string.lower(value) == 'npc' then return 'NPC_' end
+
+  local tag = tes3.tagNamed(value)
+  if tag then return tag end
+  if #value == 4 then return string.upper(value) end
+
+  return error(
+    `load-order: invalid record type '{value}': expected a tag like LIGH or a type name like Light`,
+    0
+  )
+end
+
+--- What `tes3.open` keeps of each record, for the record types and CELL parts asked for; nil
+--- when that's everything, and the plugin is read whole.
+local function keeper(types: { string }?, cell: tes3.CellParts?): ((tag: string) -> tes3.Keep)?
+  local cut = cell ~= nil and (cell.header == false or cell.references == false)
+  if not types and not cut then return nil end
+
+  local wanted: { [string]: boolean }? = nil
+  if types then
+    local tags = { TES3 = true }
+    for _, name in types do
+      tags[recordType(name)] = true
+    end
+
+    wanted = tags
+  end
+
+  local kept: tes3.Keep = if cut and cell then cell else 'whole'
+  return function(tag: string): tes3.Keep
+    if wanted and not wanted[tag] then return 'skip' end
+
+    return kept
+  end
+end
+
+--- The file's bytes, or why it can't be read: the operating system's words, as jess's own
+--- commands report them.
+local function read(path: string): (buffer?, string?)
+  local bytes, message = fs.readFile(path)
+  if bytes then return bytes, nil end
+
+  local reason = tostring(message)
+  local prefix = `dream.fs.readFile: {path}: `
+  if string.sub(reason, 1, #prefix) == prefix then reason = string.sub(reason, #prefix + 1) end
+
+  return nil, `failed to read '{path}': {reason}`
+end
+
+--- The content files of a Context that hold records, in load order.
+local function plugins<Self>(context: Self & Context<Self>): { Content }
+  local entries: { Content } = {}
+  for _, entry in context:content() do
+    if not isScriptList(entry.name) then table.insert(entries, entry) end
+  end
+
+  return entries
+end
+
+--- Opens a Context's content files: every one, in load order, or the `entries` given, in the
+--- order given. One that doesn't open is a failure in the result, and the rest still open. A file
+--- opens when its bytes frame as records, as `tes3.open` reads them; nothing is decoded.
+local function open<Self>(context: Self & Context<Self>, options: OpenOptions?): LoadOrder
+  local given: OpenOptions = options or {}
+  for key in (given :: unknown) :: { [string]: unknown } do
+    if OpenKeys[key] then continue end
+
+    error(`load-order: unknown open option '{key}': expected cell, encoding, entries, or types`, 0)
+  end
+
+  local encoding = given.encoding or context.encoding or 'win1252'
+  tes3.text.label(encoding)
+
+  local openOptions: tes3.OpenOptions = { encoding = encoding, keep = keeper(given.types, given.cell) }
+  local order: LoadOrder = { encoding = encoding, plugins = {}, failures = {} }
+
+  for _, entry in given.entries or plugins(context) do
+    local name, path = entry.name, entry.path
+    if not path then
+      table.insert(order.failures, { name = name, problem = `no data folder has '{name}'` })
+      continue
+    end
+
+    local bytes, unread = read(path)
+    if not bytes then
+      table.insert(order.failures, { name = name, path = path, problem = unread :: string })
+      continue
+    end
+
+    -- tes3.open throws on bytes that don't frame as records, and that's why the file didn't open.
+    local opened, plugin = pcall(tes3.open, bytes, openOptions)
+    if not opened then
+      local problem = `failed to parse '{path}': {plugin}`
+      table.insert(order.failures, { name = name, path = path, problem = problem })
+      continue
+    end
+
+    table.insert(
+      order.plugins,
+      { name = name, path = path, size = buffer.len(bytes), plugin = plugin :: tes3.Plugin }
+    )
+  end
+
+  return order
+end
+
+--- The masters `plugin` names, in its header's order, each with where it is in `names`: a load
+--- order's file names, first to last, matched ignoring case as OpenMW matches them. A name listed
+--- twice counts where it's listed last.
+local function masters(plugin: tes3.Plugin, names: { string }): { Master }
+  local positions: { [string]: number } = {}
+  for position, name in names do
+    positions[string.lower(name)] = position
+  end
+
+  local out: { Master } = {}
+  for _, master in plugin:masters() do
+    table.insert(out, {
+      name = master.name,
+      size = master.size,
+      position = positions[string.lower(master.name)],
+    })
+  end
+
+  return out
+end
+
+--- Where a plugin a tool generates goes: the configuration's `data-local=` folder, else its first
+--- `data=` folder that isn't the engine's own; nil when it has neither. OpenMW loads content from
+--- either, so a plugin written there can be activated.
+local function outputDirectory<Self>(context: Self & Context<Self>): string?
+  return context.writableDataDir
+end
+
+--- Adds the content file `name` to the configuration's load order, last. True when it was added,
+--- false when it was already there (in any case), and nil with the reason when it can't be:
+--- OpenMW loads content from the top of its data folders and nowhere else, so a plugin written
+--- anywhere else isn't one it could load. The configuration changes in memory; `context:save()`
+--- writes it.
+local function activate<Self>(context: Self & Context<Self>, name: string): (boolean?, string?)
+  -- Context:activate throws for a file that isn't in the data folders, and for a name openmw.cfg
+  -- can't spell; either is the reason the plugin stays out of the load order.
+  local activated, added = pcall(context.activate, context, name)
+  if not activated then return nil, tostring(added) end
+
+  return added, nil
+end
+
+return table.freeze {
+  activate = activate,
+  masters = masters,
+  open = open,
+  outputDirectory = outputDirectory,
+}
