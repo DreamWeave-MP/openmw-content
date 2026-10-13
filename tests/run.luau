@@ -291,6 +291,61 @@ suite.describe('masters', function()
     -- A name listed twice counts where it's listed last.
     expect(loadOrder.masters(opened.plugins[3].plugin, { 'base.esm', 'Other.esp', 'Base.esm' })[1].position).toBe(3)
   end)
+
+  --- A plugin naming Base.esm, LATE.esp and Gone.esm, and where `masters` finds each of them in
+  --- `names`: false for one that isn't there.
+  local patch = tes3.open(buffer.fromstring(fixtures.plugin({}, {
+    { name = 'Base.esm', size = 1 },
+    { name = 'LATE.esp', size = 2 },
+    { name = 'Gone.esm', size = 3 },
+  })))
+
+  local function positions(names: { string }): { number | false }
+    return [for master in loadOrder.masters(patch, names) => master.position or false]
+  end
+
+  suite.it('reads the list as it is at each call', function()
+    local names = { 'base.ESM', 'Other.esp', 'Late.esp' }
+    expect(positions(names)).toEqual { 1, 3, false }
+    expect(positions(names)).toEqual { 1, 3, false }
+
+    -- The same table, changed since: two names in each other's place, a name replaced, the list
+    -- made shorter, and made longer.
+    names[1], names[3] = names[3], names[1]
+    expect(positions(names)).toEqual { 3, 1, false }
+    names[2] = 'GONE.ESM'
+    expect(positions(names)).toEqual { 3, 1, 2 }
+    table.remove(names)
+    expect(positions(names)).toEqual { false, 1, 2 }
+    table.insert(names, 'Base.esm')
+    table.insert(names, 'base.esm')
+    expect(positions(names)).toEqual { 4, 1, 2 }
+
+    -- Another table: of the same names, of the names in another case, of some of them, of none.
+    expect(positions { 'Late.esp', 'GONE.ESM', 'Base.esm', 'base.esm' }).toEqual { 4, 1, 2 }
+    expect(positions { 'late.ESP', 'gone.esm', 'BASE.ESM', 'Base.Esm' }).toEqual { 4, 1, 2 }
+    expect(positions { 'Late.esp', 'GONE.ESM', 'Base.esm' }).toEqual { 3, 1, 2 }
+    expect(positions { 'Late.esp', 'GONE.ESM' }).toEqual { false, 1, 2 }
+    expect(positions {}).toEqual { false, false, false }
+    expect(positions(names)).toEqual { 4, 1, 2 }
+
+    -- What a call returns is the caller's: changing it changes no later answer.
+    local first = loadOrder.masters(patch, names)
+    first[1].position = 99
+    table.remove(first)
+    expect(positions(names)).toEqual { 4, 1, 2 }
+  end)
+
+  suite.it('counts places as the list has them, in a list with a gap', function()
+    local gapped: { string } = { 'Base.esm', nil :: any, 'Late.esp' }
+    expect(positions(gapped)).toEqual { 1, 3, false }
+    expect(positions(gapped)).toEqual { 1, 3, false }
+    expect(positions { 'Base.esm', 'Late.esp' }).toEqual { 1, 2, false }
+
+    local sparse: { string } = { [5] = 'gone.esm', [9] = 'base.esm' }
+    expect(positions(sparse)).toEqual { 9, false, 5 }
+    expect(positions(sparse)).toEqual { 9, false, 5 }
+  end)
 end)
 
 suite.describe('output', function()
