@@ -198,8 +198,9 @@ local lastPositions: { [string]: number } = {}
 
 --- Where each of `names` is, by its lower case; a name listed twice, where it's listed last.
 local function positionsIn(names: { string }): { [string]: number }
-  -- A list with a metatable is walked as its `__iter` says, which can't be asked twice.
-  local plain = getmetatable(names) == nil
+  -- A list with a metatable is walked as its `__iter` says, and a function in a list's place is
+  -- the walk itself; neither can be asked twice.
+  local plain = type(names) == 'table' and getmetatable(names) == nil
   local seen = 0
   if plain then
     for position, name in names do
