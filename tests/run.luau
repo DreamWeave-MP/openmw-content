@@ -36,21 +36,11 @@ local function order(name: string, config: string, files: { [string]: string }?)
 end
 
 local function names(loaded: { loadOrder.Loaded }): { string }
-  local out = {}
-  for _, entry in loaded do
-    table.insert(out, entry.name)
-  end
-
-  return out
+  return [for entry in loaded => entry.name]
 end
 
 local function tags(plugin: tes3.Plugin): { string }
-  local out = {}
-  for index = 0, plugin:count() - 1 do
-    table.insert(out, plugin:tag(index))
-  end
-
-  return out
+  return [for index in range(0, plugin:count() - 1) => plugin:tag(index)]
 end
 
 local Base = fixtures.plugin { fixtures.static 'rock', fixtures.light 'torch' }
@@ -273,11 +263,7 @@ suite.describe('masters', function()
     }
 
     -- Among everything the configuration lists, a file that didn't open still has its place.
-    local listed = {}
-    for _, entry in context:content() do
-      table.insert(listed, entry.name)
-    end
-
+    local listed = [for entry in context:content() => entry.name]
     expect(loadOrder.masters(opened.plugins[2].plugin, listed)[3].position).toBe(4)
     expect(loadOrder.masters(opened.plugins[3].plugin, listed)).toEqual {
       { name = 'Base.esm', size = #Base, position = 1 },
