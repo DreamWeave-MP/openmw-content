@@ -3,9 +3,9 @@
 -- Context for an install the bench writes. It opens the whole order, the order cut to two record
 -- types and to cells without their references, a list of entries a third of which don't open,
 -- and a content list no folder has a file of (which leaves the package's own work, and none of
--- `@tes3`'s or the disk's); finds every plugin's masters in the order, in one list of names and
--- in a list that changes between calls; and asks where output goes and for an activation the
--- content already has. Run by `jess run --capability filesystem.read --capability
+-- `@tes3`'s or the disk's); finds every plugin's masters in the order, in one list of names, in a
+-- list that is another from its first name at every call, and in one that is another only at its
+-- last; and asks where output goes and for an activation the content already has. Run by `jess run --capability filesystem.read --capability
 -- filesystem.write --package . --package ../openmw --package-path .. bench/bench.luau <scratch>
 -- [filter]`, on a release build. Prints one line per workload: its name, a tab, and the seconds
 -- one call takes. Every workload's result is compared with what the writer of the install says
@@ -414,6 +414,25 @@ do
     return sum[for master in loadOrder.masters(plugin.plugin, among) => master.position or Absent]
   end
 
+  --- The same sum found without the package: each master the plugin's header names, looked for
+  --- down the whole of the list.
+  local function scanned(plugin: loadOrder.Loaded, among: { string }): number
+    local total = 0
+
+    for _, master in plugin.plugin:masters() do
+      local lower = string.lower(master.name)
+      local position = Absent
+
+      for at, name in among do
+        if string.lower(name) == lower then position = at end
+      end
+
+      total += position
+    end
+
+    return total
+  end
+
   workload(
     `masters: each of {#listed} plugins' in one list of the order's {#listed} names`,
     function(): unknown return sum[for entry in order.plugins => positions(entry, listed)] end,
@@ -422,13 +441,31 @@ do
 
   -- The list is another one at every call, as it is for a tool that asks once per load order.
   local last = order.plugins[#order.plugins]
-  local forward = positions(last, listed)
-  local backward = positions(last, reversed)
+  local forward, backward = scanned(last, listed), scanned(last, reversed)
+
+  assert(forward ~= backward, 'load-order bench: the last plugin names no master the order has')
 
   workload(
     `masters: one plugin's in a list of {#listed} names, another list at every call`,
     function(): unknown return positions(last, listed) * 2 + positions(last, reversed) end,
     forward * 2 + backward
+  )
+
+  -- Two lists alike down to the last name, which the plugin after it names as a master: one is
+  -- told from the other only at its end.
+  local dependent = order.plugins[#listed - 1]
+  local before = listed[1:#listed - 2]
+  local without = table.clone(before)
+  without[#without] = 'Absent.esp'
+
+  local named, unnamed = scanned(dependent, before), scanned(dependent, without)
+
+  assert(named ~= unnamed, 'load-order bench: the plugin before the last does not name the one before it')
+
+  workload(
+    `masters: one plugin's in a list of {#before} names, its last name another at every call`,
+    function(): unknown return positions(dependent, before) * 2 + positions(dependent, without) end,
+    named * 2 + unnamed
   )
 
   assert(mastersNamed > #listed, 'load-order bench: the order names fewer masters than it has plugins')
