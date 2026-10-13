@@ -10,11 +10,13 @@ a master the order doesn't have. It opens the order whole, cut to two record typ
 cells cut to their headers; opens a list of entries a third of which don't open; opens a content
 list of 512 names no folder has a file of, through a Context that is nothing but that list, which
 leaves the package's own work and none of `@tes3`'s or the disk's; finds every plugin's masters
-in one list of the order's names, and one plugin's in a list that is another at every call; and
-asks for the output folder and for an activation the content already has. Each workload is warmed
+in one list of the order's names, one plugin's in a list that is another from its first name at
+every call, and one plugin's in a list that is another only at its last name; and asks for the
+output folder and for an activation the content already has. Each workload is warmed
 up, sized to a batch of about a tenth of a second, and reported as the median of seven batches,
 with a full collection between them. Every result is compared with what the writer of the install
-says it must be.
+says it must be; the two changing-list rows with places found by a plain scan of the list, which
+asks the package nothing.
 
 `bench/cold.luau` times what one process pays once: the `require` of this package's module with
 `@dream/fs` and `@tes3` loaded first, then the first `open` of three plugins and the first
@@ -33,34 +35,40 @@ jess run --package jpk/load-order --package-path jpk \
 ## The move onto l3i 2.0, base against head
 
 - Machine: Intel Core i7-10870H @ 2.20 GHz, 16 threads, shared with other work while this ran
-  (load average 0.8 to 1.1 over the run).
+  (load average 0.4 to 1.1 over the runs).
 - Date: 2026-10-13.
 - Binary: the verified release build of Jess 0.1.0 on l3i 2.0.2 (Luau 0.742), the same one for
   both sides, and the same sibling packages.
-- Base: `f1ad870`, the package before the move, with both benches. Head: `5f63aa7`.
+- Base: `f1ad870`, the package before the move, run with the benches as they are now. Head:
+  `d3a36cc`.
 - Protocol: the whole of `bench.luau` against an export of base, then head, five times over,
   back to back under one lock; each cell is the median of its five runs. `cold.luau` the same
   way, thirty-one times over. A difference under 5 percent is called no change.
+- These are the numbers of the review's run, which measured everything again. The run before it,
+  of base against `5f63aa7`, had the one list at 3.28x (1235.2 against 376.9), the list that is
+  another at every call at 0.93x (25.67 against 27.59), and `require @load-order` at 0.89x
+  (1411.5 against 1585.9); it had no row for a list that is another only at its last name.
 
 | Workload | Base, µs | Head, µs | Base / head |
 |---|---:|---:|---:|
-| open: 96 plugins of 103 content files, whole | 1831.8 | 1817.3 | no change |
-| open: 96 plugins, the lights and statics of each | 2315.6 | 2275.6 | no change |
-| open: 96 plugins, cells without their references | 3093.5 | 3027.7 | no change |
-| open: 96 entries given, 32 of them missing, unreadable or not a plugin | 1386.1 | 1374.9 | no change |
-| open: a content list of 512 names no folder has, 64 of them script lists | 176.5 | 175.2 | no change |
-| masters: each of 96 plugins' in one list of the order's 96 names | 1235.2 | 376.9 | 3.28x |
-| masters: one plugin's in a list of 96 names, another list at every call | 25.67 | 27.59 | 0.93x |
-| outputDirectory: the folder a generated plugin goes to | 1.508 | 1.504 | no change |
-| activate: a name the content already has, in another case | 14.50 | 14.64 | no change |
+| open: 96 plugins of 103 content files, whole | 1819.8 | 1877.0 | no change |
+| open: 96 plugins, the lights and statics of each | 2340.7 | 2323.1 | no change |
+| open: 96 plugins, cells without their references | 3063.5 | 3115.5 | no change |
+| open: 96 entries given, 32 of them missing, unreadable or not a plugin | 1380.5 | 1377.7 | no change |
+| open: a content list of 512 names no folder has, 64 of them script lists | 175.1 | 175.2 | no change |
+| masters: each of 96 plugins' in one list of the order's 96 names | 1236.4 | 381.3 | 3.24x |
+| masters: one plugin's in a list of 96 names, another list at every call | 25.92 | 28.02 | 0.93x |
+| masters: one plugin's in a list of 94 names, its last name another at every call | 26.24 | 30.12 | 0.87x |
+| outputDirectory: the folder a generated plugin goes to | 1.476 | 1.530 | no change |
+| activate: a name the content already has, in another case | 14.57 | 14.69 | no change |
 
 | One cold process | Base, µs | Head, µs | Base / head |
 |---|---:|---:|---:|
-| require @dream/fs and @tes3 | 103168.5 | 102953.6 | no change |
-| require @load-order, those loaded | 1411.5 | 1585.9 | 0.89x |
-| first open, 3 plugins of a content list of 4 | 74.9 | 73.8 | no change |
-| first masters, in 3 names | 13.66 | 13.89 | no change |
-| require @load-order to the masters | 1502.8 | 1675.4 | 0.90x |
+| require @dream/fs and @tes3 | 102610.2 | 103393.7 | no change |
+| require @load-order, those loaded | 1419.6 | 1621.3 | 0.88x |
+| first open, 3 plugins of a content list of 4 | 77.0 | 76.6 | no change |
+| first masters, in 3 names | 13.55 | 14.19 | no change (0.95x) |
+| require @load-order to the masters | 1519.8 | 1713.1 | 0.89x |
 
 ### What moved, and why
 
@@ -74,15 +82,25 @@ a call first walks the list it is handed against that copy, name for name: about
 for 96 names when it is the same list, and one comparison when the first name differs. The list
 is read at every call as before, so a table changed in place, made again, or handed in another
 order answers as it always did; `tests/run.luau` holds that, and the places of a list with a gap.
+Only a plain table is walked against the copy. A list whose metatable says how it's walked, and
+a function in a list's place, are walked once and never kept: `12c973c` walked such a function
+twice, so it lost the names the first walk took or was refused by `table.clone`, and `d3a36cc`
+put that right.
 
-The same change is the two rows that lost. A caller that hands `masters` another list at every
-call pays for the walk and the copy and never uses them: 0.6 µs a call for 96 names (the row is
-three calls), 7 percent. No package does that today. And the module takes 0.17 ms longer to
-`require` (0.89x), which every process that loads it pays whether it asks for masters or not:
+The same change is the three rows that lost. A caller that hands `masters` another list at every
+call pays for the copy, and for the walk as far as the lists agree, and never uses them. Where the
+lists part at the first name that is 1.0 µs a call for 96 names (the row is two calls), 8 percent
+more; where they part only at the last, which is as long as the walk gets, 1.9 µs a call for 94
+names, 15 percent more. No package does either today. And the module takes 0.20 ms longer to `require`
+(0.88x), which every process that loads it pays whether it asks for masters or not:
 `s3lightfixes` and `tes3merge` never do. Against the 103 ms the modules below it take to load,
 that is 0.2 percent of the process; against what it buys, an order of 96 plugins gets 0.86 ms
 back from its masters, and a tool that asks about fewer than about twenty plugins of such an
-order gets back less than the load cost.
+order gets back less than the load cost. What a call saves grows with the list: 2.4, 4.6, 9.3,
+18.3 and 36.3 µs for a list of 24, 48, 96, 192 and 384 names (single runs outside the lock). So a
+tool that asks about every plugin of its order, as `merged-lands` does, gets the load cost back
+at about 46 plugins by that arithmetic, loses the 0.20 ms on an order of three, and gets 3.5 ms
+back from its masters on one of 192.
 
 What did not move is where the time is, which is not in this package. Over 96 plugins of 100
 records handed in as entries (single runs outside the lock again), opening them is 1.33 ms:
@@ -94,23 +112,34 @@ calls the package once for every record, with one table read in it; the rest of 
 
 ### A change at a time
 
-Each commit against the one before it, on the rows it could touch: five runs warm and thirty-one
-cold, alternating, medians.
+Each commit against the one before it, on the rows it could touch: the three masters rows five
+times warm and `cold.luau` thirty-one times, the five sources alternating under one lock each,
+medians. The masters rows are another session's than the table above, so their ratios against
+base differ from it within the noise (0.96x here for the list that is another at every call,
+0.90x for the last name).
 
 | Commit | What it does | Row | Before, µs | After, µs | Before / after |
 |---|---|---|---:|---:|---:|
-| `90d88a1` | an entry's and a master's fields by record pattern | masters, one list | 1261.0 | 1243.3 | no change |
-| | | masters, another list at every call | 26.17 | 25.79 | no change |
-| | | require @load-order | 1441.3 | 1474.6 | no change (0.98x) |
-| `12c973c` | the last list's places kept | masters, one list | 1243.3 | 375.8 | 3.31x |
-| | | masters, another list at every call | 25.79 | 28.81 | 0.90x |
-| | | require @load-order | 1474.6 | 1681.5 | 0.88x |
-| `5f63aa7` | the kept list one `table.clone` | masters, one list | 375.8 | 386.7 | no change |
-| | | masters, another list at every call | 28.81 | 27.50 | no change (1.05x) |
-| | | require @load-order | 1681.5 | 1677.5 | no change |
+| `90d88a1` | an entry's and a master's fields by record pattern | masters, one list | 1253.8 | 1270.1 | no change |
+| | | masters, another list at every call | 26.21 | 26.14 | no change |
+| | | masters, the last name another | 26.37 | 26.13 | no change |
+| | | require @load-order | 1419.6 | 1458.6 | no change (0.97x) |
+| `12c973c` | the last list's places kept | masters, one list | 1270.1 | 390.2 | 3.25x |
+| | | masters, another list at every call | 26.14 | 29.11 | 0.90x |
+| | | masters, the last name another | 26.13 | 31.46 | 0.83x |
+| | | require @load-order | 1458.6 | 1600.1 | 0.91x |
+| `5f63aa7` | the kept list one `table.clone` | masters, one list | 390.2 | 376.2 | no change |
+| | | masters, another list at every call | 29.11 | 26.95 | 1.08x |
+| | | masters, the last name another | 31.46 | 29.42 | 1.07x |
+| | | require @load-order | 1600.1 | 1618.9 | no change |
+| `d3a36cc` | a function in a list's place walked once | masters, one list | 376.2 | 380.9 | no change |
+| | | masters, another list at every call | 26.95 | 27.35 | no change |
+| | | masters, the last name another | 29.42 | 29.47 | no change |
+| | | require @load-order | 1618.9 | 1621.3 | no change |
 
-`5f63aa7` is at the edge of what this protocol can show: 1.05x here, 1.06x (29.42 against 27.69)
-in a run of five before it. It is also four lines shorter.
+`5f63aa7` gives back part of what `12c973c` cost a changing list, 1.08x and 1.07x here; the two
+runs of five before this one had it at 1.05x and 1.06x, at the edge of what the protocol can
+show. It is also four lines shorter.
 
 ### The dialect, and what it costs to load
 
