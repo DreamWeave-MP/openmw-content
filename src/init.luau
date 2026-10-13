@@ -162,7 +162,7 @@ local function open<Self>(context: Self & Context<Self>, options: OpenOptions?):
   local order: LoadOrder = { encoding = encoding, plugins = {}, failures = {} }
 
   for _, entry in given.entries or plugins(context) do
-    local name, path = entry.name, entry.path
+    local {name, path} = entry
     if not path then
       table.insert(order.failures, { name = name, problem = `no data folder has '{name}'` })
       continue
@@ -202,11 +202,8 @@ local function masters(plugin: tes3.Plugin, names: { string }): { Master }
 
   local out: { Master } = {}
   for _, master in plugin:masters() do
-    table.insert(out, {
-      name = master.name,
-      size = master.size,
-      position = positions[string.lower(master.name)],
-    })
+    local {name, size} = master
+    table.insert(out, { name = name, size = size, position = positions[string.lower(name)] })
   end
 
   return out
