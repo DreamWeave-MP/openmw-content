@@ -1,0 +1,457 @@
+--!strict
+-- A load order, timed from Luau the way a tool reaches it: `@load-order` over an `@openmw`
+-- Context for an install the bench writes. It opens the whole order, the order cut to two record
+-- types and to cells without their references, a list of entries a third of which don't open,
+-- and a content list no folder has a file of (which leaves the package's own work, and none of
+-- `@tes3`'s or the disk's); finds every plugin's masters in the order, in one list of names and
+-- in a list that changes between calls; and asks where output goes and for an activation the
+-- content already has. Run by `jess run --capability filesystem.read --capability
+-- filesystem.write --package . --package ../openmw --package-path .. bench/bench.luau <scratch>
+-- [filter]`, on a release build. Prints one line per workload: its name, a tab, and the seconds
+-- one call takes. Every workload's result is compared with what the writer of the install says
+-- it must be, outside the time, so a path that stopped doing the work fails here.
+local fs = require '@dream/fs'
+local loadOrder = require '@load-order'
+local openmw = require '@openmw'
+
+-- A build without the verified toolchain runs Luau slower than a release does, so a number from
+-- one says nothing about what ships.
+if not jess.bench.verified then
+  error('load-order bench: this jess was built without the verified toolchain: measure on a release build', 0)
+end
+
+--- The arguments: a folder to write the install into, and a filter on the workload names.
+local scratch: string?, filter: string? = ...
+local only = if filter and filter ~= '' then filter else nil
+
+export type Row = { name: string, seconds: number }
+
+local rows: { Row } = {}
+
+local function median(samples: { number }): number
+  table.sort(samples)
+  return samples[(#samples + 1) // 2]
+end
+
+--- Seconds per call of `body`: warmed up, then the median of seven batches of a size that takes
+--- about a tenth of a second, with a full collection before each so one batch's garbage isn't the
+--- next one's. `verify` is given the result of the first call and of one more after the last
+--- batch, outside the time.
+local function measure(body: () -> unknown, verify: (result: unknown) -> ()): number
+  jess.bench.collect()
+  verify(body())
+  local start = os.clock()
+  body()
+  local once = math.max(os.clock() - start, 1e-7)
+  local iterations = math.max(1, math.floor(0.1 / once))
+  local samples: { number } = {}
+
+  for batch = 1, 7 do
+    jess.bench.collect()
+    start = os.clock()
+
+    for _ = 1, iterations do
+      body()
+    end
+
+    samples[batch] = (os.clock() - start) / iterations
+  end
+
+  verify(body())
+  return median(samples)
+end
+
+--- Times `body`, whose every result must be `expected`.
+local function workload(name: string, body: () -> unknown, expected: unknown)
+  if only and not string.find(name, only, 1, true) then return end
+
+  local function verify(result: unknown)
+    if result ~= expected then
+      error(`load-order bench: {name}: returned {result}, not the install's {expected}`, 0)
+    end
+  end
+
+  table.insert(rows, { name = name, seconds = measure(body, verify) })
+end
+
+local function io<Value>(value: Value?, message: string?, kind: dream_fs_ErrorKind?): Value
+  if not value then error(message or tostring(kind), 0) end
+
+  return value
+end
+
+local given: string = assert(scratch, 'load-order bench: the first argument is a scratch folder')
+local root = jess.fs.join(io(fs.absolute(given)), 'load-order-bench')
+
+do
+  local stale, problem = fs.exists(root)
+  if problem then error(problem, 0) end
+
+  if stale then io(fs.remove(root, { recursive = true })) end
+end
+
+--[[ Plugins, as bytes ]]
+
+local function u32(value: number): string return string.pack('<I4', value) end
+
+local function subrecord(tag: string, payload: string): string
+  return tag .. u32(#payload) .. payload
+end
+
+local function record(tag: string, payload: string): string
+  return tag .. u32(#payload) .. u32(0) .. u32(0) .. payload
+end
+
+local function fixed(text: string, length: number): string
+  return text .. string.rep('\0', length - #text)
+end
+
+type MasterEntry = { name: string, size: number }
+
+local function header(count: number, masters: { MasterEntry }): string
+  local parts = {
+    subrecord('HEDR', string.pack('<f', 1.3) .. u32(0) .. fixed('bench', 32) .. fixed('synthetic', 256) .. u32(count)),
+  }
+
+  for _, master in masters do
+    table.insert(parts, subrecord('MAST', master.name .. '\0'))
+    table.insert(parts, subrecord('DATA', string.pack('<I8', master.size)))
+  end
+
+  return record('TES3', table.concat(parts))
+end
+
+local function static(id: string): string
+  return record('STAT', subrecord('NAME', id .. '\0') .. subrecord('MODL', `{id}.nif\0`))
+end
+
+local function light(id: string): string
+  local data = string.pack('<fIiIBBBBI', 1, 5, 10, 100, 255, 160, 60, 0, 1)
+  return record('LIGH', subrecord('NAME', id .. '\0') .. subrecord('LHDT', data))
+end
+
+local function person(id: string): string return record('NPC_', subrecord('NAME', id .. '\0')) end
+
+local ReferencesPerCell = 6
+
+--- An interior cell holding `ReferencesPerCell` objects.
+local function cell(name: string): string
+  local parts = {
+    subrecord('NAME', name .. '\0'),
+    subrecord('DATA', u32(1) .. u32(0) .. u32(0)),
+    subrecord('NAM0', u32(ReferencesPerCell)),
+  }
+
+  for index = 1, ReferencesPerCell do
+    table.insert(parts, subrecord('FRMR', u32(index)))
+    table.insert(parts, subrecord('NAME', 'rock\0'))
+    table.insert(parts, subrecord('DATA', string.rep('\0', 24)))
+  end
+
+  return record('CELL', table.concat(parts))
+end
+
+--- How many records of each type a plugin of a size holds, after its header.
+type Shape = { statics: number, lights: number, cells: number, people: number }
+
+local MasterShape: Shape = { statics = 400, lights = 400, cells = 120, people = 80 }
+local ModShape: Shape = { statics = 40, lights = 40, cells = 12, people = 8 }
+
+local function plugin(label: string, shape: Shape, masters: { MasterEntry }): string
+  local records: { string } = {}
+
+  for index = 1, shape.statics do
+    table.insert(records, static(`{label}_static_{index}`))
+  end
+
+  for index = 1, shape.cells do
+    table.insert(records, cell(`{label} cell {index}`))
+  end
+
+  for index = 1, shape.lights do
+    table.insert(records, light(`{label}_light_{index}`))
+  end
+
+  for index = 1, shape.people do
+    table.insert(records, person(`{label}_person_{index}`))
+  end
+
+  return header(#records, masters) .. table.concat(records)
+end
+
+--[[ The install ]]
+
+--- `name` in one of three cases by `index`: a master is seldom named the way the content list
+--- spells the file.
+local function spelled(name: string, index: number): string
+  if index % 3 == 0 then return string.upper(name) end
+
+  return if index % 3 == 1 then name else string.lower(name)
+end
+
+local Masters, Mods, ModFolders = 3, 93, 3
+
+--- What the install holds, as its writer knows it: the content names in load order (script
+--- lists among them), the plugins' names, paths and sizes in the same order, and what opening
+--- them all must find.
+local content: { string }, names: { string }, paths: { string } = {}, {}, {}
+local folders: { string }, sizes: { number } = {}, {}
+local totalBytes, totalRecords, keptByType, masterPositions, mastersNamed = 0, 0, 0, 0, 0
+
+--- What a master the order doesn't hold adds to the sum of positions a workload returns.
+local Absent = 1000
+
+--- How many names the content list that no folder has a file of holds.
+local ListedNames = 512
+
+do
+  local core = jess.fs.join(root, 'data', 'core')
+  io(fs.mkdir(core, { recursive = true }))
+  table.insert(folders, core)
+
+  for index = 1, ModFolders do
+    local folder = jess.fs.join(root, 'data', `mods-{index}`)
+    io(fs.mkdir(folder, { recursive = true }))
+    table.insert(folders, folder)
+  end
+
+  io(fs.mkdir(jess.fs.join(root, 'local'), { recursive = true }))
+
+  local function add(folder: string, name: string, shape: Shape, masters: { MasterEntry })
+    local bytes = plugin(string.lower(string.match(name, '^[^.]*') :: string), shape, masters)
+    local path = jess.fs.join(folder, name)
+    io(fs.writeFile(path, bytes))
+    table.insert(content, name)
+    table.insert(names, name)
+    table.insert(paths, path)
+    table.insert(sizes, #bytes)
+    totalBytes += #bytes
+    totalRecords += 1 + shape.statics + shape.lights + shape.cells + shape.people
+    keptByType += 1 + shape.statics + shape.lights
+
+    for _, master in masters do
+      local lower = string.lower(master.name)
+      local position = Absent
+
+      for at, listed in names do
+        if string.lower(listed) == lower then position = at end
+      end
+
+      masterPositions += position
+      mastersNamed += 1
+    end
+  end
+
+  for index = 1, Masters do
+    local masters: { MasterEntry } = {}
+
+    for earlier = 1, index - 1 do
+      table.insert(masters, { name = names[earlier], size = sizes[earlier] })
+    end
+
+    add(core, `Base {index}.esm`, MasterShape, masters)
+  end
+
+  for index = 1, Mods do
+    local masters: { MasterEntry } = {}
+
+    for earlier = 1, Masters do
+      table.insert(masters, { name = spelled(names[earlier], index + earlier), size = sizes[earlier] })
+    end
+
+    -- Every fourth names the plugin before it, and every tenth one the order doesn't have.
+    if index % 4 == 0 then
+      table.insert(masters, { name = spelled(names[#names], index), size = sizes[#sizes] })
+    end
+
+    if index % 10 == 0 then table.insert(masters, { name = `Gone {index}.esm`, size = 1234 }) end
+
+    add(folders[2 + index % ModFolders], string.format('Mod %03d.esp', index), ModShape, masters)
+
+    if index % 12 ~= 0 then continue end
+
+    local scripts = string.format('Mod %03d.omwscripts', index)
+    io(fs.writeFile(jess.fs.join(folders[2], scripts), 'PLAYER: scripts/player.lua\n'))
+    table.insert(content, scripts)
+  end
+end
+
+local configPath = jess.fs.join(root, 'config', 'openmw.cfg')
+
+do
+  local lines = { 'encoding=win1252', `data-local="{jess.fs.join(root, 'local')}"` }
+
+  for _, folder in folders do
+    table.insert(lines, `data="{folder}"`)
+  end
+
+  for _, name in content do
+    table.insert(lines, `content={name}`)
+  end
+
+  io(fs.mkdir(jess.fs.parent(configPath) :: string, { recursive = true }))
+  io(fs.writeFile(configPath, table.concat(lines, '\n') .. '\n'))
+end
+
+local context = openmw.new(configPath)
+
+assert(#context:content() == #content, 'load-order bench: the configuration does not list the content that was written')
+
+--[[ Opening ]]
+
+--- A number only the order that was written opens to: every file in its place, its size, and
+--- how many records were kept of it.
+local function opened(order: loadOrder.LoadOrder, plugins: number, failures: number): number
+  if #order.plugins ~= plugins or #order.failures ~= failures then return -1 end
+
+  local total = 0
+
+  for _, entry in order.plugins do
+    total += entry.size + entry.plugin:count()
+  end
+
+  return total
+end
+
+workload(
+  `open: {#names} plugins of {#content} content files, whole`,
+  function(): unknown return opened(loadOrder.open(context), #names, 0) end,
+  totalBytes + totalRecords
+)
+
+workload(
+  `open: {#names} plugins, the lights and statics of each`,
+  function(): unknown return opened(loadOrder.open(context, { types = { 'LIGH', 'Static' } }), #names, 0) end,
+  totalBytes + keptByType
+)
+
+workload(
+  `open: {#names} plugins, cells without their references`,
+  function(): unknown
+    local order = loadOrder.open(context, { cell = { references = false } })
+    local partial = #[for entry in order.plugins if entry.plugin:hasPartialRecords() => entry]
+
+    return opened(order, #names, 0) + partial
+  end,
+  totalBytes + totalRecords + #names
+)
+
+do
+  local entries: { loadOrder.Content } = {}
+  local broken = jess.fs.join(root, 'data', 'core', 'Broken.esp')
+  local bytes, readable = 0, 0
+  io(fs.writeFile(broken, 'not a plugin'))
+
+  for index, name in names do
+    local kind = index % 12
+
+    if kind == 0 then
+      table.insert(entries, { name = name })
+    elseif kind == 3 then
+      table.insert(entries, { name = name, path = jess.fs.join(root, 'data', `Gone {index}.esp`) })
+    elseif kind == 6 then
+      table.insert(entries, { name = name, path = folders[1] })
+    elseif kind == 9 then
+      table.insert(entries, { name = name, path = broken })
+    else
+      table.insert(entries, { name = name, path = paths[index] })
+      bytes += sizes[index]
+      readable += 1
+    end
+  end
+
+  workload(
+    `open: {#entries} entries given, {#entries - readable} of them missing, unreadable or not a plugin`,
+    function(): unknown
+      local order = loadOrder.open(context, { entries = entries })
+      local explained = #[for failure in order.failures if #failure.problem > #failure.name => failure]
+      local size = sum[for entry in order.plugins => entry.size]
+
+      return if explained == #entries - readable and #order.plugins == readable then size else -1
+    end,
+    bytes
+  )
+end
+
+do
+  local lists = 0
+  local listed: { loadOrder.Content } = {}
+
+  for index = 1, ListedNames do
+    if index % 8 == 0 then
+      lists += 1
+      table.insert(listed, { name = spelled(string.format('Mod %03d.omwscripts', index), index) })
+    else
+      table.insert(listed, { name = spelled(string.format('Mod %03d.esp', index), index) })
+    end
+  end
+
+  -- The Context is taken by its shape, so this one is nothing but a list: no file is opened, and
+  -- what's timed is the package's own work on a content list.
+  local shape = {
+    content = function(_self: unknown): { loadOrder.Content } return listed end,
+    activate = function(_self: unknown, _name: string): boolean return false end,
+  }
+
+  workload(
+    `open: a content list of {ListedNames} names no folder has, {lists} of them script lists`,
+    function(): unknown
+      local order = loadOrder.open(shape)
+      return #order.failures * 2 + #order.plugins
+    end,
+    (ListedNames - lists) * 2
+  )
+end
+
+--[[ Masters ]]
+
+do
+  local order = loadOrder.open(context)
+  local listed = [for entry in order.plugins => entry.name]
+  local reversed = [for index in range(#listed, 1, -1) => listed[index]]
+
+  local function positions(plugin: loadOrder.Loaded, among: { string }): number
+    return sum[for master in loadOrder.masters(plugin.plugin, among) => master.position or Absent]
+  end
+
+  workload(
+    `masters: each of {#listed} plugins' in one list of the order's {#listed} names`,
+    function(): unknown return sum[for entry in order.plugins => positions(entry, listed)] end,
+    masterPositions
+  )
+
+  -- The list is another one at every call, as it is for a tool that asks once per load order.
+  local last = order.plugins[#order.plugins]
+  local forward = positions(last, listed)
+  local backward = positions(last, reversed)
+
+  workload(
+    `masters: one plugin's in a list of {#listed} names, another list at every call`,
+    function(): unknown return positions(last, listed) * 2 + positions(last, reversed) end,
+    forward * 2 + backward
+  )
+
+  assert(mastersNamed > #listed, 'load-order bench: the order names fewer masters than it has plugins')
+end
+
+--[[ Output and activation ]]
+
+workload(
+  'outputDirectory: the folder a generated plugin goes to',
+  function(): unknown return loadOrder.outputDirectory(context) end,
+  jess.fs.join(root, 'local')
+)
+
+workload(
+  'activate: a name the content already has, in another case',
+  function(): unknown return loadOrder.activate(context, string.upper(names[#names])) end,
+  false
+)
+
+io(fs.remove(root, { recursive = true }))
+
+for _, row in rows do
+  print(`{row.name}\t{string.format('%.9f', row.seconds)}`)
+end
+
+return rows
