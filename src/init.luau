@@ -191,15 +191,56 @@ local function open<Self>(context: Self & Context<Self>, options: OpenOptions?):
   return order
 end
 
+--- The list of names `masters` was last asked about, and where each is in it by its lower case:
+--- a tool asks about each plugin of a load order in turn, with the one list.
+local lastNames: { string }, lastCount = {}, 0
+local lastPositions: { [string]: number } = {}
+
+--- Where each of `names` is, by its lower case; a name listed twice, where it's listed last.
+local function positionsIn(names: { string }): { [string]: number }
+  -- A list with a metatable is walked as its `__iter` says, which can't be asked twice.
+  local plain = getmetatable(names) == nil
+  local seen = 0
+  if plain then
+    for position, name in names do
+      seen += 1
+      if position == seen and lastNames[seen] == name then continue end
+
+      seen = -1
+      break
+    end
+
+    if seen == lastCount then return lastPositions end
+  end
+
+  local positions: { [string]: number } = {}
+  local kept: { string } = {}
+  seen = 0
+  for position, name in names do
+    positions[string.lower(name)] = position
+    seen += 1
+
+    -- Only a list of strings, each at the place it's walked in, is one to know again: a number
+    -- equals another whose lower case is another's (0 and -0).
+    if position == seen and type(name) == 'string' then
+      kept[seen] = name
+    else
+      plain = false
+    end
+  end
+
+  if plain then
+    lastNames, lastCount, lastPositions = kept, seen, positions
+  end
+
+  return positions
+end
+
 --- The masters `plugin` names, in its header's order, each with where it is in `names`: a load
 --- order's file names, first to last, matched ignoring case as OpenMW matches them. A name listed
 --- twice counts where it's listed last.
 local function masters(plugin: tes3.Plugin, names: { string }): { Master }
-  local positions: { [string]: number } = {}
-  for position, name in names do
-    positions[string.lower(name)] = position
-  end
-
+  local positions = positionsIn(names)
   local out: { Master } = {}
   for _, master in plugin:masters() do
     local {name, size} = master
