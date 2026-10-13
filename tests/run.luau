@@ -332,6 +332,49 @@ suite.describe('masters', function()
     expect(positions(sparse)).toEqual { 9, false, 5 }
     expect(positions(sparse)).toEqual { 9, false, 5 }
   end)
+
+  suite.it('walks once what can be walked only once', function()
+    --- A walk of `names` in a list's place, as a `for` takes a function: it can't be begun again.
+    local function once(names: { string }): { string }
+      local at = 0
+      local function step(): (number?, string?)
+        at += 1
+        local name = names[at]
+
+        return if name then at else nil, name
+      end
+
+      return (step :: unknown) :: { string }
+    end
+
+    expect(positions(once { 'late.esp', 'Other.esp', 'BASE.esm' })).toEqual { 3, 1, false }
+
+    -- After a list it would know again: a walk that begins with that list's names, one that is
+    -- those names and no more, one that ends before them, and one of nothing.
+    local names = { 'Base.esm', 'Late.esp' }
+    expect(positions(names)).toEqual { 1, 2, false }
+    expect(positions(once { 'Base.esm', 'Late.esp', 'Gone.esm' })).toEqual { 1, 2, 3 }
+    expect(positions(names)).toEqual { 1, 2, false }
+    expect(positions(once { 'Base.esm', 'Late.esp' })).toEqual { 1, 2, false }
+    expect(positions(names)).toEqual { 1, 2, false }
+    expect(positions(once { 'Base.esm' })).toEqual { 1, false, false }
+    expect(positions(names)).toEqual { 1, 2, false }
+    expect(positions(once {})).toEqual { false, false, false }
+
+    -- A list whose metatable says how it's walked is asked once, at every call.
+    local asked = 0
+    local walked = setmetatable({}, {
+      __iter = function(): (typeof(next), { string })
+        asked += 1
+        return next, { 'Late.esp', 'Base.esm' }
+      end,
+    })
+
+    local viewed = (walked :: unknown) :: { string }
+    expect(positions(viewed)).toEqual { 2, 1, false }
+    expect(positions(viewed)).toEqual { 2, 1, false }
+    expect(asked).toBe(2)
+  end)
 end)
 
 suite.describe('output', function()
