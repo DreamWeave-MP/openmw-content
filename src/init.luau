@@ -214,7 +214,6 @@ local function positionsIn(names: { string }): { [string]: number }
   end
 
   local positions: { [string]: number } = {}
-  local kept: { string } = {}
   seen = 0
   for position, name in names do
     positions[string.lower(name)] = position
@@ -222,15 +221,12 @@ local function positionsIn(names: { string }): { [string]: number }
 
     -- Only a list of strings, each at the place it's walked in, is one to know again: a number
     -- equals another whose lower case is another's (0 and -0).
-    if position == seen and type(name) == 'string' then
-      kept[seen] = name
-    else
-      plain = false
-    end
+    if position ~= seen or type(name) ~= 'string' then plain = false end
   end
 
+  -- The caller's table may change before it asks again, so what's kept of it is a copy.
   if plain then
-    lastNames, lastCount, lastPositions = kept, seen, positions
+    lastNames, lastCount, lastPositions = table.clone(names), seen, positions
   end
 
   return positions
