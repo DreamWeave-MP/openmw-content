@@ -1,0 +1,117 @@
+--!strict
+-- What a tool that opens one load order and exits pays before anything is warm: this package's
+-- module compiled and run, with the modules it stands on loaded first and timed apart, then the
+-- first `open` of three plugins and the first `masters`. Run by `jess run --capability
+-- filesystem.read --capability filesystem.write --package . --package-path .. bench/cold.luau
+-- <scratch>`, on a release build. Each line is one sample of something a process does once, so
+-- compare medians over many runs. This file uses none of the l3i dialect, so that whatever the
+-- module's first use of it costs is paid inside the `require` timed here.
+local started = os.clock()
+local fs = require '@dream/fs'
+require '@tes3'
+local requiredBelow = os.clock() - started
+
+if not jess.bench.verified then
+  error('load-order bench: this jess was built without the verified toolchain: measure on a release build', 0)
+end
+
+local scratch: string? = ...
+local given: string = assert(scratch, 'load-order bench: the first argument is a scratch folder')
+
+local function io<Value>(value: Value?, message: string?, kind: dream_fs_ErrorKind?): Value
+  if not value then error(message or tostring(kind), 0) end
+
+  return value
+end
+
+local function u32(value: number): string return string.pack('<I4', value) end
+
+local function subrecord(tag: string, payload: string): string
+  return tag .. u32(#payload) .. payload
+end
+
+local function record(tag: string, payload: string): string
+  return tag .. u32(#payload) .. u32(0) .. u32(0) .. payload
+end
+
+--- A plugin of `statics` records after its header, which names `masters`.
+local function plugin(statics: number, masters: { string }): string
+  local hedr = string.pack('<f', 1.3) .. u32(0) .. string.rep('\0', 288) .. u32(statics)
+  local head = { subrecord('HEDR', hedr) }
+
+  for _, master in masters do
+    table.insert(head, subrecord('MAST', master .. '\0'))
+    table.insert(head, subrecord('DATA', string.pack('<I8', 1234)))
+  end
+
+  local parts = { record('TES3', table.concat(head)) }
+
+  for index = 1, statics do
+    local id = `rock_{index}`
+    table.insert(parts, record('STAT', subrecord('NAME', id .. '\0') .. subrecord('MODL', `{id}.nif\0`)))
+  end
+
+  return table.concat(parts)
+end
+
+local root = jess.fs.join(io(fs.absolute(given)), 'load-order-cold')
+local Statics = 200
+local Files = {
+  { name = 'Base.esm', masters = {} },
+  { name = 'Addon.esp', masters = { 'base.ESM' } },
+  { name = 'Patch.esp', masters = { 'Base.esm', 'ADDON.esp', 'Gone.esm' } },
+}
+
+local entries: { { name: string, path: string? } }, names: { string } = {}, {}
+
+io(fs.mkdir(root, { recursive = true }))
+
+for _, file in Files do
+  local path = jess.fs.join(root, file.name)
+  io(fs.writeFile(path, plugin(Statics, file.masters)))
+  table.insert(entries, { name = file.name, path = path })
+  table.insert(names, file.name)
+end
+
+table.insert(entries, { name = 'Scripts.omwscripts', path = jess.fs.join(root, 'Scripts.omwscripts') })
+
+-- The Context is taken by its shape; a tool's own is an `@openmw` one, whose cost is not this
+-- package's.
+local context = {
+  content = function(_self: unknown): { { name: string, path: string? } } return entries end,
+  activate = function(_self: unknown, _name: string): boolean return false end,
+}
+
+started = os.clock()
+local loadOrder = require '@load-order'
+local required = os.clock() - started
+
+started = os.clock()
+local order = loadOrder.open(context)
+local opened = os.clock() - started
+
+started = os.clock()
+local masters = loadOrder.masters(order.plugins[3].plugin, names)
+local found = os.clock() - started
+
+io(fs.remove(root, { recursive = true }))
+
+local records = 0
+
+for _, entry in order.plugins do
+  records += entry.plugin:count()
+end
+
+if #order.failures ~= 0 or records ~= #Files * (Statics + 1) then
+  error('load-order bench: the cold order is not what the files hold', 0)
+end
+
+if #masters ~= 3 or masters[1].position ~= 1 or masters[2].position ~= 2 or masters[3].position then
+  error('load-order bench: the cold masters are not where the files are', 0)
+end
+
+print(`cold: require @dream/fs and @tes3\t{string.format('%.9f', requiredBelow)}`)
+print(`cold: require @load-order, those loaded\t{string.format('%.9f', required)}`)
+print(`cold: first open, {#Files} plugins of a content list of {#entries}\t{string.format('%.9f', opened)}`)
+print(`cold: first masters, in {#names} names\t{string.format('%.9f', found)}`)
+print(`cold: require @load-order to the masters\t{string.format('%.9f', required + opened + found)}`)
