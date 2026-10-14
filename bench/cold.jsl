@@ -2,7 +2,7 @@
 -- What a tool that opens one load order and exits pays before anything is warm: this package's
 -- module compiled and run, with the modules it stands on loaded first and timed apart, then the
 -- first `open` of three plugins and the first `masters`. Run by `jess run --capability
--- filesystem.read --capability filesystem.write --package . --package-path .. bench/cold.luau
+-- filesystem.read --capability filesystem.write --package . --package-path .. bench/cold.jsl
 -- <scratch>`, on a release build. Each line is one sample of something a process does once, so
 -- compare medians over many runs. This file uses none of the l3i dialect, so that whatever the
 -- module's first use of it costs is paid inside the `require` timed here.

@@ -1,7 +1,7 @@
 --!strict
 --!native
 -- The plugin byte builders the suite's load orders are made of, copied from tes3cmd's suite
--- (`tests/fixtures.luau` there), which spells the synthetic plugins of jess's CLI tests the same
+-- (`tests/fixtures.jsl` there), which spells the synthetic plugins of jess's CLI tests the same
 -- way.
 
 local function u32(value: number): string return string.pack('<I4', value) end

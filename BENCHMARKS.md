@@ -1,6 +1,6 @@
 # Load order benchmarks
 
-`bench/bench.luau` times the package the way a tool reaches it: `@load-order` over an `@openmw`
+`bench/bench.jsl` times the package the way a tool reaches it: `@load-order` over an `@openmw`
 Context for an install the bench writes. The install is four data folders, three masters of
 1,001 records and 93 plugins of 101 (statics, lights, people, and cells of six references each),
 1.4 MB and 12,396 records in 96 files, and a content list of 103 names, seven of them script
@@ -18,18 +18,18 @@ with a full collection between them. Every result is compared with what the writ
 says it must be; the two changing-list rows with places found by a plain scan of the list, which
 asks the package nothing.
 
-`bench/cold.luau` times what one process pays once: the `require` of this package's module with
+`bench/cold.jsl` times what one process pays once: the `require` of this package's module with
 `@dream/fs` and `@tes3` loaded first, then the first `open` of three plugins and the first
 `masters`. Each line is a single sample, so it is run many times and the medians are compared.
 
 ```sh
 jess run --package jpk/load-order --package jpk/openmw --package-path jpk \
   --capability filesystem.read --capability filesystem.write \
-  jpk/load-order/bench/bench.luau <scratch folder> [filter]
+  jpk/load-order/bench/bench.jsl <scratch folder> [filter]
 
 jess run --package jpk/load-order --package-path jpk \
   --capability filesystem.read --capability filesystem.write \
-  jpk/load-order/bench/cold.luau <scratch folder>
+  jpk/load-order/bench/cold.jsl <scratch folder>
 ```
 
 ## The move onto l3i 2.0, base against head
@@ -41,8 +41,8 @@ jess run --package jpk/load-order --package-path jpk \
   both sides, and the same sibling packages.
 - Base: `f1ad870`, the package before the move, run with the benches as they are now. Head:
   `d3a36cc`.
-- Protocol: the whole of `bench.luau` against an export of base, then head, five times over,
-  back to back under one lock; each cell is the median of its five runs. `cold.luau` the same
+- Protocol: the whole of `bench.jsl` against an export of base, then head, five times over,
+  back to back under one lock; each cell is the median of its five runs. `cold.jsl` the same
   way, thirty-one times over. A difference under 5 percent is called no change.
 - These are the numbers of the review's run, which measured everything again. The run before it,
   of base against `5f63aa7`, had the one list at 3.28x (1235.2 against 376.9), the list that is
@@ -81,7 +81,7 @@ package now keeps a copy of the last list it was asked about and where each of i
 a call first walks the list it is handed against that copy, name for name: about a microsecond
 for 96 names when it is the same list, and one comparison when the first name differs. The list
 is read at every call as before, so a table changed in place, made again, or handed in another
-order answers as it always did; `tests/run.luau` holds that, and the places of a list with a gap.
+order answers as it always did; `tests/run.jsl` holds that, and the places of a list with a gap.
 Only a plain table is walked against the copy. A list whose metatable says how it's walked, and
 a function in a list's place, are walked once and never kept: `12c973c` walked such a function
 twice, so it lost the names the first walk took or was refused by `table.clone`, and `d3a36cc`
@@ -113,7 +113,7 @@ calls the package once for every record, with one table read in it; the rest of 
 ### A change at a time
 
 Each commit against the one before it, on the rows it could touch: the three masters rows five
-times warm and `cold.luau` thirty-one times, the five sources alternating under one lock each,
+times warm and `cold.jsl` thirty-one times, the five sources alternating under one lock each,
 medians. The masters rows are another session's than the table above, so their ratios against
 base differ from it within the noise (0.96x here for the list that is another at every call,
 0.90x for the last name).
