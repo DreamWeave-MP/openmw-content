@@ -177,3 +177,43 @@ beside `masters` took 0.25 ms of `require`, as one 0.19, and written into `maste
   over 900 names. A tool opens one load order. Not taken.
 - **The kept list's copy presized.** 27.87 µs against 28.80 for the changing list, five runs:
   no change, and `table.clone` replaced it.
+
+## Which modules are native, and why
+
+Jess compiles to machine code only what is marked (`--!native` on a module, `@native` on one
+function), and every load pays for what is marked. A module carries `--!native` when a row below
+spends its time there and the module is small (12 KB or less); a larger module carries `@native`
+on the functions the row spends its time in, and nothing else.
+
+Measured 2026-10-14 with `jess 0.1.0`, the verified release build of jess `07c38cb` on l3i
+2.0.3, on the i7-10870H, the one-minute load 1.19 and 1.48 at the start of the two
+sessions. In each session the bench ran alternately on this package and on a copy of it with
+every module marked, three fresh runs of `bench/bench.jsl` each, every run's row the median of
+its batches; a column is the median of the three, and a ratio is against the all-marked runs of
+the same session. Which functions a row spends its time in comes from `jess run --profile` of
+that row alone, unmarked. The load cost is a fresh `jess run --package <this package>
+--package-path jpk` of a script that only requires `@load-order`, the two sides alternating, the
+median of five each after one warm-up.
+
+| Requiring `@load-order` | All marked | This state |
+| --- | ---: | ---: |
+| Unmarked | 0.101 s | 0.100 s |
+| Final | 0.102 s | 0.102 s |
+
+| Row | All marked (ms) | Unmarked / all marked | Final (ms) | Final / all marked |
+| --- | ---: | ---: | ---: | ---: |
+| open: 96 plugins of 103 content files, whole | 2.033 | 0.985× | 2.038 | 1.003× |
+| open: 96 plugins, the lights and statics of each | 2.759 | **1.097×** | 2.615 | 0.948× |
+| open: 96 plugins, cells without their references | 4.022 | **1.072×** | 3.955 | 0.984× |
+| open: 96 entries given, 32 of them missing, unreadable or not a plugin | 1.517 | 1.022× | 1.574 | 1.037× |
+| open: a content list of 512 names no folder has, 64 of them script lists | 0.1949 | **1.327×** | 0.1883 | 0.966× |
+| masters: each of 96 plugins' in one list of the order's 96 names | 0.5335 | **1.422×** | 0.5176 | 0.970× |
+| masters: one plugin's in a list of 96 names, another list at every call | 0.03343 | **1.284×** | 0.03237 | 0.968× |
+| masters: one plugin's in a list of 94 names, its last name another at every call | 0.03618 | **1.417×** | 0.03481 | 0.962× |
+| outputDirectory: the folder a generated plugin goes to | 0.00173 | 0.987× | 0.00168 | 0.970× |
+| activate: a name the content already has, in another case | 0.01637 | 1.013× | 0.01583 | 0.967× |
+
+What carries the directive: `init`, whole, the package's only module. Unmarked, requiring
+`@load-order` cost what all marked does, within a millisecond (0.0996 s against 0.1005 s), and
+the opens and the master checks ran 1.07x to 1.42x slower. At 11 KB it costs less to compile than
+one open of the order saves, so it stays marked, and no row is more than 5% slower than all marked.
