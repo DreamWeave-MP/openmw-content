@@ -22,15 +22,15 @@ end
 --- A configuration folder named `name` holding `config` as its openmw.cfg and `files` by their
 --- paths under it; the folder, and the Context over the configuration.
 local function order(name: string, config: string, files: { [string]: string }?): (string, openmw.Context)
-  local directory = jess.fs.join(scratch, 'load-order', name)
+  local directory = fs.join(scratch, 'load-order', name)
   io(fs.mkdir(directory, { recursive = true }))
   for path, bytes in files or {} do
-    local file = jess.fs.join(directory, path)
-    io(fs.mkdir(jess.fs.parent(file) :: string, { recursive = true }))
+    local file = fs.join(directory, path)
+    io(fs.mkdir(fs.parent(file) :: string, { recursive = true }))
     io(fs.writeFile(file, bytes))
   end
 
-  local path = jess.fs.join(directory, 'openmw.cfg')
+  local path = fs.join(directory, 'openmw.cfg')
   io(fs.writeFile(path, config))
   return directory, openmw.new(path)
 end
@@ -63,11 +63,11 @@ suite.describe('opening', function()
     expect(names(opened.plugins)).toEqual { 'Base.esm', 'Addon.esp' }
 
     local base, addon = opened.plugins[1], opened.plugins[2]
-    expect(base.path).toBe(jess.fs.join(directory, 'data/Base.esm'))
+    expect(base.path).toBe(fs.join(directory, 'data/Base.esm'))
     expect(base.size).toBe(#Base)
     expect(tags(base.plugin)).toEqual { 'TES3', 'STAT', 'LIGH' }
     -- The name is the configuration's; the path is the file a data folder has for it.
-    expect(addon.path).toBe(jess.fs.join(directory, 'more/addon.ESP'))
+    expect(addon.path).toBe(fs.join(directory, 'more/addon.ESP'))
     expect(addon.size).toBe(#Addon)
     expect(tes3.records.id(addon.plugin, 1)).toBe 'lamp'
     expect(addon.plugin:masters()[1].name).toBe 'Base.esm'
@@ -84,7 +84,7 @@ suite.describe('opening', function()
     local opened = loadOrder.open(context)
     expect(names(opened.plugins)).toEqual { 'Base.esm', 'Addon.esp' }
 
-    local broken = jess.fs.join(directory, 'data/Broken.esp')
+    local broken = fs.join(directory, 'data/Broken.esp')
     expect(opened.failures).toEqual {
       { name = 'Missing.esp', problem = 'no data folder has \'Missing.esp\'' },
       {
@@ -97,13 +97,13 @@ suite.describe('opening', function()
 
   suite.it('says why a file it was pointed at can\'t be read', function()
     local directory, context = order('unreadable', 'data=data\n', { ['data/Base.esm'] = Base })
-    local gone = jess.fs.join(directory, 'data/Gone.esp')
-    local folder = jess.fs.join(directory, 'data')
+    local gone = fs.join(directory, 'data/Gone.esp')
+    local folder = fs.join(directory, 'data')
     local opened = loadOrder.open(context, {
       entries = {
         { name = 'Gone.esp', path = gone },
         { name = 'Folder.esp', path = folder },
-        { name = 'Base.esm', path = jess.fs.join(directory, 'data/Base.esm') },
+        { name = 'Base.esm', path = fs.join(directory, 'data/Base.esm') },
       },
     })
     expect(names(opened.plugins)).toEqual { 'Base.esm' }
@@ -152,14 +152,14 @@ suite.describe('opening', function()
         { name = 'Nowhere.esp', path = context:resolve 'Nowhere.esp' },
       },
     })
-    expect(loose.plugins[1].path).toBe(jess.fs.join(directory, 'data/Loose.esp'))
+    expect(loose.plugins[1].path).toBe(fs.join(directory, 'data/Loose.esp'))
     expect(loose.failures).toEqual {
       { name = 'Nowhere.esp', problem = 'no data folder has \'Nowhere.esp\'' },
     }
 
     -- Given entries are opened as they are: nothing is left out for its name.
     local scripts = loadOrder.open(context, {
-      entries = { { name = 'Scripts.omwscripts', path = jess.fs.join(directory, 'data/Base.esm') } },
+      entries = { { name = 'Scripts.omwscripts', path = fs.join(directory, 'data/Base.esm') } },
     })
     expect(names(scripts.plugins)).toEqual { 'Scripts.omwscripts' }
     expect(loadOrder.open(context, { entries = {} })).toEqual {
@@ -380,18 +380,18 @@ end)
 suite.describe('output', function()
   suite.it('writes to data-local when the configuration has one', function()
     local directory, context = order('output-local', 'data=data\ndata-local=local\n')
-    expect(loadOrder.outputDirectory(context)).toBe(jess.fs.join(directory, 'local'))
+    expect(loadOrder.outputDirectory(context)).toBe(fs.join(directory, 'local'))
   end)
 
   suite.it('writes to the first data folder without a data-local', function()
     local directory, context = order('output-data', 'data=first\ndata=second\n')
-    expect(loadOrder.outputDirectory(context)).toBe(jess.fs.join(directory, 'first'))
+    expect(loadOrder.outputDirectory(context)).toBe(fs.join(directory, 'first'))
   end)
 
   suite.it('never writes to the engine\'s own data folder', function()
     local directory, context =
       order('output-engine', 'resources=resources\ndata=resources/vfs\ndata=mods\n')
-    expect(loadOrder.outputDirectory(context)).toBe(jess.fs.join(directory, 'mods'))
+    expect(loadOrder.outputDirectory(context)).toBe(fs.join(directory, 'mods'))
 
     local _, engineOnly = order('output-engine-only', 'resources=resources\ndata=resources/vfs\n')
     expect(loadOrder.outputDirectory(engineOnly)).toBeNil()
@@ -414,7 +414,7 @@ suite.describe('activation', function()
     -- A tool writes its plugin where `outputDirectory` says, then activates it.
     local output = loadOrder.outputDirectory(context) :: string
     io(fs.mkdir(output, { recursive = true }))
-    io(fs.writeFile(jess.fs.join(output, 'Generated.omwaddon'), Addon))
+    io(fs.writeFile(fs.join(output, 'Generated.omwaddon'), Addon))
 
     expect({ loadOrder.activate(context, 'Generated.omwaddon') }).toEqual { true }
     expect({ loadOrder.activate(context, 'generated.OMWADDON') }).toEqual { false }
@@ -422,7 +422,7 @@ suite.describe('activation', function()
     expect(names(loadOrder.open(context).plugins)).toEqual { 'Base.esm', 'Generated.omwaddon' }
 
     -- Nothing is written until the Context saves, which backs the configuration up first.
-    local path = jess.fs.join(directory, 'openmw.cfg')
+    local path = fs.join(directory, 'openmw.cfg')
     expect(io(fs.readFileString(path))).toBe 'data=data\ndata-local=local\ncontent=Base.esm\n'
     local written = context:save()
     expect(written.path).toBe(path)
@@ -439,7 +439,7 @@ suite.describe('activation', function()
     expect(added).toBeNil()
     expect(reason).toContain '\'Generated.omwaddon\' isn\'t in the data folders'
     expect(context:configuration():values 'content').toEqual { 'Base.esm' }
-    expect(jess.fs.isFile(jess.fs.join(directory, 'elsewhere/Generated.omwaddon'))).toBe(true)
+    expect(fs.isFile(fs.join(directory, 'elsewhere/Generated.omwaddon'))).toBe(true)
 
     -- A name openmw.cfg can't spell is refused the same way.
     local unspelled, why = loadOrder.activate(context, 'Two\nLines.esp')

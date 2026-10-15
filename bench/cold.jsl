@@ -54,7 +54,7 @@ local function plugin(statics: number, masters: { string }): string
   return table.concat(parts)
 end
 
-local root = jess.fs.join(io(fs.absolute(given)), 'load-order-cold')
+local root = fs.join(io(fs.absolute(given)), 'load-order-cold')
 local Statics = 200
 local Files = {
   { name = 'Base.esm', masters = {} },
@@ -67,13 +67,13 @@ local entries: { { name: string, path: string? } }, names: { string } = {}, {}
 io(fs.mkdir(root, { recursive = true }))
 
 for _, file in Files do
-  local path = jess.fs.join(root, file.name)
+  local path = fs.join(root, file.name)
   io(fs.writeFile(path, plugin(Statics, file.masters)))
   table.insert(entries, { name = file.name, path = path })
   table.insert(names, file.name)
 end
 
-table.insert(entries, { name = 'Scripts.omwscripts', path = jess.fs.join(root, 'Scripts.omwscripts') })
+table.insert(entries, { name = 'Scripts.omwscripts', path = fs.join(root, 'Scripts.omwscripts') })
 
 -- The Context is taken by its shape; a tool's own is an `@openmw` one, whose cost is not this
 -- package's.

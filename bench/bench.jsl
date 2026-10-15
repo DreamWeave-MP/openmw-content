@@ -81,7 +81,7 @@ local function io<Value>(value: Value?, message: string?, kind: dream_fs_ErrorKi
 end
 
 local given: string = assert(scratch, 'load-order bench: the first argument is a scratch folder')
-local root = jess.fs.join(io(fs.absolute(given)), 'load-order-bench')
+local root = fs.join(io(fs.absolute(given)), 'load-order-bench')
 
 do
   local stale, problem = fs.exists(root)
@@ -205,21 +205,21 @@ local Absent = 1000
 local ListedNames = 512
 
 do
-  local core = jess.fs.join(root, 'data', 'core')
+  local core = fs.join(root, 'data', 'core')
   io(fs.mkdir(core, { recursive = true }))
   table.insert(folders, core)
 
   for index = 1, ModFolders do
-    local folder = jess.fs.join(root, 'data', `mods-{index}`)
+    local folder = fs.join(root, 'data', `mods-{index}`)
     io(fs.mkdir(folder, { recursive = true }))
     table.insert(folders, folder)
   end
 
-  io(fs.mkdir(jess.fs.join(root, 'local'), { recursive = true }))
+  io(fs.mkdir(fs.join(root, 'local'), { recursive = true }))
 
   local function add(folder: string, name: string, shape: Shape, masters: { MasterEntry })
     local bytes = plugin(string.lower(string.match(name, '^[^.]*') :: string), shape, masters)
-    local path = jess.fs.join(folder, name)
+    local path = fs.join(folder, name)
     io(fs.writeFile(path, bytes))
     table.insert(content, name)
     table.insert(names, name)
@@ -271,15 +271,15 @@ do
     if index % 12 ~= 0 then continue end
 
     local scripts = string.format('Mod %03d.omwscripts', index)
-    io(fs.writeFile(jess.fs.join(folders[2], scripts), 'PLAYER: scripts/player.lua\n'))
+    io(fs.writeFile(fs.join(folders[2], scripts), 'PLAYER: scripts/player.lua\n'))
     table.insert(content, scripts)
   end
 end
 
-local configPath = jess.fs.join(root, 'config', 'openmw.cfg')
+local configPath = fs.join(root, 'config', 'openmw.cfg')
 
 do
-  local lines = { 'encoding=win1252', `data-local="{jess.fs.join(root, 'local')}"` }
+  local lines = { 'encoding=win1252', `data-local="{fs.join(root, 'local')}"` }
 
   for _, folder in folders do
     table.insert(lines, `data="{folder}"`)
@@ -289,7 +289,7 @@ do
     table.insert(lines, `content={name}`)
   end
 
-  io(fs.mkdir(jess.fs.parent(configPath) :: string, { recursive = true }))
+  io(fs.mkdir(fs.parent(configPath) :: string, { recursive = true }))
   io(fs.writeFile(configPath, table.concat(lines, '\n') .. '\n'))
 end
 
@@ -338,7 +338,7 @@ workload(
 
 do
   local entries: { loadOrder.Content } = {}
-  local broken = jess.fs.join(root, 'data', 'core', 'Broken.esp')
+  local broken = fs.join(root, 'data', 'core', 'Broken.esp')
   local bytes, readable = 0, 0
   io(fs.writeFile(broken, 'not a plugin'))
 
@@ -348,7 +348,7 @@ do
     if kind == 0 then
       table.insert(entries, { name = name })
     elseif kind == 3 then
-      table.insert(entries, { name = name, path = jess.fs.join(root, 'data', `Gone {index}.esp`) })
+      table.insert(entries, { name = name, path = fs.join(root, 'data', `Gone {index}.esp`) })
     elseif kind == 6 then
       table.insert(entries, { name = name, path = folders[1] })
     elseif kind == 9 then
@@ -476,7 +476,7 @@ end
 workload(
   'outputDirectory: the folder a generated plugin goes to',
   function(): unknown return loadOrder.outputDirectory(context) end,
-  jess.fs.join(root, 'local')
+  fs.join(root, 'local')
 )
 
 workload(
