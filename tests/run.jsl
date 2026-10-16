@@ -9,6 +9,15 @@ local openmw = require '@openmw'
 local tes3 = require '@tes3'
 local test = require '@jess/test'
 
+--- The text of the file at `path`, raising the read's own message when there is none.
+local function readText(path: string): string
+  local text, problem = fs.readFileString(path)
+  if not text then error(problem, 0) end
+
+  return text
+end
+
+
 local expect = test.expect
 local suite = test.new()
 local scratch = assert(rawget(_G, 'scratchRoot') :: string?, 'the suite needs a host-owned scratchRoot')
@@ -423,10 +432,10 @@ suite.describe('activation', function()
 
     -- Nothing is written until the Context saves, which backs the configuration up first.
     local path = fs.join(directory, 'openmw.cfg')
-    expect(io(fs.readFileString(path))).toBe 'data=data\ndata-local=local\ncontent=Base.esm\n'
+    expect(io(readText(path))).toBe 'data=data\ndata-local=local\ncontent=Base.esm\n'
     local written = context:save()
     expect(written.path).toBe(path)
-    expect(io(fs.readFileString(written.backup :: string))).toBe 'data=data\ndata-local=local\ncontent=Base.esm\n'
+    expect(io(readText(written.backup :: string))).toBe 'data=data\ndata-local=local\ncontent=Base.esm\n'
     expect(openmw.new(path):configuration():values 'content').toEqual { 'Base.esm', 'Generated.omwaddon' }
   end)
 
