@@ -77,9 +77,16 @@ table.insert(entries, { name = 'Scripts.omwscripts', path = fs.join(root, 'Scrip
 
 -- The Context is taken by its shape; a tool's own is an `@openmw` one, whose cost is not this
 -- package's.
-local context = {
+type Shape = {
+  encoding: string?,
+  writableDataDir: string?,
+  content: (self: Shape) -> { { name: string, path: string? } },
+  activate: (self: Shape, name: string, options: { force: boolean? }?) -> (boolean?, string?),
+}
+
+local context: Shape = {
   content = function(_self: unknown): { { name: string, path: string? } } return entries end,
-  activate = function(_self: unknown, _name: string): boolean return false end,
+  activate = function(_self: unknown, _name: string, _options: { force: boolean? }?): (boolean?, string?) return false, nil end,
 }
 
 started = os.clock()

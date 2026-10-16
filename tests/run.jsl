@@ -286,7 +286,7 @@ suite.describe('masters', function()
     { name = 'Gone.esm', size = 3 },
   })))
 
-  local function positions(names: { string }): { number | false }
+  local function positions(names: { string }): { number | boolean }
     return [for master in loadOrder.masters(patch, names) => master.position or false]
   end
 

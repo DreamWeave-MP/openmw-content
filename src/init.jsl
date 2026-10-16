@@ -30,7 +30,7 @@ type Context<Self> = {
   read encoding: string?,
   read writableDataDir: string?,
   read content: (self: Self) -> { Content },
-  read activate: (self: Self, name: string, options: { force: boolean? }?) -> boolean,
+  read activate: (self: Self, name: string, options: { force: boolean? }?) -> (boolean?, string?),
 }
 
 export type OpenOptions = {
@@ -260,12 +260,7 @@ end
 --- anywhere else isn't one it could load. The configuration changes in memory; `context:save()`
 --- writes it.
 local function activate<Self>(context: Self & Context<Self>, name: string): (boolean?, string?)
-  -- Context:activate throws for a file that isn't in the data folders, and for a name openmw.cfg
-  -- can't spell; either is the reason the plugin stays out of the load order.
-  local activated, added = pcall(context.activate, context, name)
-  if not activated then return nil, tostring(added) end
-
-  return added, nil
+  return context.activate(context, name)
 end
 
 return table.freeze {
