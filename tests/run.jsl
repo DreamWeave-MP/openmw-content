@@ -448,7 +448,7 @@ suite.describe('activation', function()
     expect(added).toBeNil()
     expect(reason).toContain '\'Generated.omwaddon\' isn\'t in the data folders'
     expect(context:configuration():values 'content').toEqual { 'Base.esm' }
-    expect(fs.isFile(fs.join(directory, 'elsewhere/Generated.omwaddon'))).toBe(true)
+    expect((fs.isFile(fs.join(directory, 'elsewhere/Generated.omwaddon')))).toBe(true)
 
     -- A name openmw.cfg can't spell is refused the same way.
     local unspelled, why = loadOrder.activate(context, 'Two\nLines.esp')
