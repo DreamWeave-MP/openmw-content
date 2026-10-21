@@ -1,0 +1,51 @@
+{
+  "schema_version": "3",
+  "document": "lock",
+  "project": "09a3fe95-b7c6-4026-9682-a6a75c9f6390",
+  "note": "Written by CI when a release tag is pushed: what each published release's archive contains. Do not edit.",
+  "releases": [
+    {
+      "version": "0.1.0",
+      "locked_from": "a3096e310f6264e115d6154ade1c2fe116108ef2",
+      "artifacts": [
+        {
+          "id": "jpk",
+          "format": "jpk",
+          "filename": "org.dreamweave.openmw-content-0.1.0.jpk",
+          "media_type": "application/vnd.jess.jpk",
+          "size": 15641,
+          "digests": {
+            "sha256": "16bf4aead793f6d48459db7a55081bad722c656aa73b6ffeadc32caf1f02469d"
+          },
+          "jess": {
+            "package": "org.dreamweave.openmw-content",
+            "jess_api": "1",
+            "content_digest": "e3b97afa3214cd00d409b1878f9edeced100e5916aa260e70574bedb288bf833",
+            "dependencies": {
+              "org.dreamweave.esm": "0.1"
+            }
+          }
+        }
+      ],
+      "runtimes": {},
+      "platforms": [],
+      "provides": [],
+      "relationships": [],
+      "components": [
+        {
+          "id": "main",
+          "name": "openmw-content",
+          "path": ".",
+          "required": true,
+          "default": true,
+          "requires": [],
+          "conflicts": [],
+          "suggested_with": []
+        }
+      ],
+      "groups": [],
+      "extensions": {},
+      "critical_extensions": []
+    }
+  ]
+}
