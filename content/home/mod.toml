@@ -1,0 +1,20 @@
+# openmw-content as a DreamWeave project: a Jess package. `jess` names the Package Source it publishes,
+# the repository root's own jess.toml, and each release tag `openmw_content-<version>` is one version of
+# the package, packed by the Mod Template from that tag; every push packs a development build.
+id = "09a3fe95-b7c6-4026-9682-a6a75c9f6390"
+slug = "openmw_content"
+type = "library"
+status = "active"
+
+[[maintainers]]
+name = "DreamWeave"
+url = "https://github.com/DreamWeave-MP"
+
+[package]
+format = "jpk"
+jess = "org.dreamweave.openmw-content"
+
+[[releases]]
+version = "0.1.0"
+date = 2026-10-21
+summary = "First release published as a DreamWeave project."
