@@ -1,12 +1,12 @@
 --!strict
 --!native
 -- load-order's own cases, on load orders built in scratch: an openmw.cfg, its data folders, and
--- content files made of bytes (`fixtures.jsl`), opened through a real `@openmw` Context.
+-- content files made of bytes (`fixtures.jsl`), opened through a real `@openmw-install` Context.
 local fixtures = require './fixtures'
 local fs = require '@dream/fs'
-local loadOrder = require '@load-order'
-local openmw = require '@openmw'
-local tes3 = require '@tes3'
+local loadOrder = require '@openmw-content'
+local openmw = require '@openmw-install'
+local tes3 = require '@esm'
 local test = require '@jess/test'
 
 --- The text of the file at `path`, raising the read's own message when there is none.

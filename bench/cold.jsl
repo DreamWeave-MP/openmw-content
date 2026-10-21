@@ -8,7 +8,7 @@
 -- module's first use of it costs is paid inside the `require` timed here.
 local started = os.clock()
 local fs = require '@dream/fs'
-require '@tes3'
+require '@esm'
 local requiredBelow = os.clock() - started
 
 if not jess.bench.verified then
@@ -75,7 +75,7 @@ end
 
 table.insert(entries, { name = 'Scripts.omwscripts', path = fs.join(root, 'Scripts.omwscripts') })
 
--- The Context is taken by its shape; a tool's own is an `@openmw` one, whose cost is not this
+-- The Context is taken by its shape; a tool's own is an `@openmw-install` one, whose cost is not this
 -- package's.
 type Shape = {
   encoding: string?,
@@ -90,7 +90,7 @@ local context: Shape = {
 }
 
 started = os.clock()
-local loadOrder = require '@load-order'
+local loadOrder = require '@openmw-content'
 local required = os.clock() - started
 
 started = os.clock()
@@ -121,4 +121,4 @@ print(`cold: require @dream/fs and @tes3\t{string.format('%.9f', requiredBelow)}
 print(`cold: require @load-order, those loaded\t{string.format('%.9f', required)}`)
 print(`cold: first open, {#Files} plugins of a content list of {#entries}\t{string.format('%.9f', opened)}`)
 print(`cold: first masters, in {#names} names\t{string.format('%.9f', found)}`)
-print(`cold: require @load-order to the masters\t{string.format('%.9f', required + opened + found)}`)
+print(`cold: require @openmw-content to the masters\t{string.format('%.9f', required + opened + found)}`)

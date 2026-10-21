@@ -4,12 +4,12 @@
 
 --[[
 A load order, opened: what a tool that works over an OpenMW configuration's content files needs
-from underneath it. `open` reads the content files an `@openmw` Context lists, in load order and
+from underneath it. `open` reads the content files an `@openmw-install` Context lists, in load order and
 in the configuration's code page, and reports the ones that don't open instead of stopping at
 them; `masters` says where each master a plugin names is in an order; `outputDirectory` is where a
 plugin a tool generates goes; and `activate` adds one to the configuration's content.
 
-The Context is taken by its shape, so this depends on `@tes3` alone, and a tool that has its
+The Context is taken by its shape, so this depends on `@esm` alone, and a tool that has its
 files some other way can hand `open` the entries itself. Content files are read from the paths the
 Context resolved them to, through `@dream/fs`, which needs the `filesystem.read` capability.
 Nothing here writes a file: a tool writes its own plugin, and the Context saves its own
@@ -17,13 +17,13 @@ configuration (`context:save()`).
 ]]
 
 local fs = require '@dream/fs'
-local tes3 = require '@tes3'
+local tes3 = require '@esm'
 
---- A content file as an `@openmw` Context lists one: its name as `content=` spells it, and the
+--- A content file as an `@openmw-install` Context lists one: its name as `content=` spells it, and the
 --- file a data folder has for it, if one does.
 export type Content = { name: string, path: string? }
 
---- What this uses of an `@openmw` Context, named here so opening a load order doesn't depend on
+--- What this uses of an `@openmw-install` Context, named here so opening a load order doesn't depend on
 --- the VFS and archives behind one. `Self` is the whole Context: its methods take it as their
 --- receiver, and the checker rejects a Context where they are declared to take anything narrower.
 type Context<Self> = {
@@ -82,7 +82,7 @@ local function isScriptList(name: string): boolean
 end
 
 --- A record type's tag: from a tag (`LIGH`, `npc` for `NPC_`) or a type name (`Light`) in any
---- case, as selectors take them; any other four characters are a tag, for types `@tes3` doesn't
+--- case, as selectors take them; any other four characters are a tag, for types `@esm` doesn't
 --- model.
 local function recordType(value: string): string
   if string.lower(value) == 'npc' then return 'NPC_' end

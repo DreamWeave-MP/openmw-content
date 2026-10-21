@@ -1,6 +1,6 @@
 # Load order benchmarks
 
-`bench/bench.jsl` times the package the way a tool reaches it: `@load-order` over an `@openmw`
+`bench/bench.jsl` times the package the way a tool reaches it: `@openmw-content` over an `@openmw-install`
 Context for an install the bench writes. The install is four data folders, three masters of
 1,001 records and 93 plugins of 101 (statics, lights, people, and cells of six references each),
 1.4 MB and 12,396 records in 96 files, and a content list of 103 names, seven of them script
@@ -9,7 +9,7 @@ names the three masters in one of three cases, every fourth the plugin before it
 a master the order doesn't have. It opens the order whole, cut to two record types, and with
 cells cut to their headers; opens a list of entries a third of which don't open; opens a content
 list of 512 names no folder has a file of, through a Context that is nothing but that list, which
-leaves the package's own work and none of `@tes3`'s or the disk's; finds every plugin's masters
+leaves the package's own work and none of `@esm`'s or the disk's; finds every plugin's masters
 in one list of the order's names, one plugin's in a list that is another from its first name at
 every call, and one plugin's in a list that is another only at its last name; and asks for the
 output folder and for an activation the content already has. Each workload is warmed
@@ -19,7 +19,7 @@ says it must be; the two changing-list rows with places found by a plain scan of
 asks the package nothing.
 
 `bench/cold.jsl` times what one process pays once: the `require` of this package's module with
-`@dream/fs` and `@tes3` loaded first, then the first `open` of three plugins and the first
+`@dream/fs` and `@esm` loaded first, then the first `open` of three plugins and the first
 `masters`. Each line is a single sample, so it is run many times and the medians are compared.
 
 ```sh
@@ -46,7 +46,7 @@ jess run --package jpk/load-order --package-path jpk \
   way, thirty-one times over. A difference under 5 percent is called no change.
 - These are the numbers of the review's run, which measured everything again. The run before it,
   of base against `5f63aa7`, had the one list at 3.28x (1235.2 against 376.9), the list that is
-  another at every call at 0.93x (25.67 against 27.59), and `require @load-order` at 0.89x
+  another at every call at 0.93x (25.67 against 27.59), and `require @openmw-content` at 0.89x
   (1411.5 against 1585.9); it had no row for a list that is another only at its last name.
 
 | Workload | Base, µs | Head, µs | Base / head |
@@ -64,17 +64,17 @@ jess run --package jpk/load-order --package-path jpk \
 
 | One cold process | Base, µs | Head, µs | Base / head |
 |---|---:|---:|---:|
-| require @dream/fs and @tes3 | 102610.2 | 103393.7 | no change |
+| require @dream/fs and @esm | 102610.2 | 103393.7 | no change |
 | require @load-order, those loaded | 1419.6 | 1621.3 | 0.88x |
 | first open, 3 plugins of a content list of 4 | 77.0 | 76.6 | no change |
 | first masters, in 3 names | 13.55 | 14.19 | no change (0.95x) |
-| require @load-order to the masters | 1519.8 | 1713.1 | 0.89x |
+| require @openmw-content to the masters | 1519.8 | 1713.1 | 0.89x |
 
 ### What moved, and why
 
 One row gained, and none of the gain is the dialect's. `masters` lowered every name of the list
 it was handed and keyed a table by it, at every call: 9.6 µs for 96 names, next to the 2.7 µs
-`plugin:masters()` takes in `@tes3` for a plugin of four (single runs outside the lock, to say
+`plugin:masters()` takes in `@esm` for a plugin of four (single runs outside the lock, to say
 where to look). A tool asks about each plugin of a load order in turn with the one list
 (`merged-lands` does), so an order of 96 plugins lowered 9,216 names to find 314 masters. The
 package now keeps a copy of the last list it was asked about and where each of its names is, and
@@ -108,7 +108,7 @@ reading the files is 0.52 of it, `tes3.open` framing them 0.57, and the same loo
 hand with no package in it 1.26. The package's own work on a file (its loop, the entry it builds,
 the reason it words for a file that didn't open) is about 0.7 µs, 5 percent. A filtered open
 calls the package once for every record, with one table read in it; the rest of that walk is
-`@tes3`'s.
+`@esm`'s.
 
 ### A change at a time
 
@@ -123,19 +123,19 @@ base differ from it within the noise (0.96x here for the list that is another at
 | `90d88a1` | an entry's and a master's fields by record pattern | masters, one list | 1253.8 | 1270.1 | no change |
 | | | masters, another list at every call | 26.21 | 26.14 | no change |
 | | | masters, the last name another | 26.37 | 26.13 | no change |
-| | | require @load-order | 1419.6 | 1458.6 | no change (0.97x) |
+| | | require @openmw-content | 1419.6 | 1458.6 | no change (0.97x) |
 | `12c973c` | the last list's places kept | masters, one list | 1270.1 | 390.2 | 3.25x |
 | | | masters, another list at every call | 26.14 | 29.11 | 0.90x |
 | | | masters, the last name another | 26.13 | 31.46 | 0.83x |
-| | | require @load-order | 1458.6 | 1600.1 | 0.91x |
+| | | require @openmw-content | 1458.6 | 1600.1 | 0.91x |
 | `5f63aa7` | the kept list one `table.clone` | masters, one list | 390.2 | 376.2 | no change |
 | | | masters, another list at every call | 29.11 | 26.95 | 1.08x |
 | | | masters, the last name another | 31.46 | 29.42 | 1.07x |
-| | | require @load-order | 1600.1 | 1618.9 | no change |
+| | | require @openmw-content | 1600.1 | 1618.9 | no change |
 | `d3a36cc` | a function in a list's place walked once | masters, one list | 376.2 | 380.9 | no change |
 | | | masters, another list at every call | 26.95 | 27.35 | no change |
 | | | masters, the last name another | 29.42 | 29.47 | no change |
-| | | require @load-order | 1618.9 | 1621.3 | no change |
+| | | require @openmw-content | 1618.9 | 1621.3 | no change |
 
 `5f63aa7` gives back part of what `12c973c` cost a changing list, 1.08x and 1.07x here; the two
 runs of five before this one had it at 1.05x and 1.06x, at the edge of what the protocol can
@@ -192,10 +192,10 @@ every module marked, three fresh runs of `bench/bench.jsl` each, every run's row
 its batches; a column is the median of the three, and a ratio is against the all-marked runs of
 the same session. Which functions a row spends its time in comes from `jess run --profile` of
 that row alone, unmarked. The load cost is a fresh `jess run --package <this package>
---package-path jpk` of a script that only requires `@load-order`, the two sides alternating, the
+--package-path jpk` of a script that only requires `@openmw-content`, the two sides alternating, the
 median of five each after one warm-up.
 
-| Requiring `@load-order` | All marked | This state |
+| Requiring `@openmw-content` | All marked | This state |
 | --- | ---: | ---: |
 | Unmarked | 0.101 s | 0.100 s |
 | Final | 0.102 s | 0.102 s |
@@ -214,6 +214,6 @@ median of five each after one warm-up.
 | activate: a name the content already has, in another case | 0.01637 | 1.013× | 0.01583 | 0.967× |
 
 What carries the directive: `init`, whole, the package's only module. Unmarked, requiring
-`@load-order` cost what all marked does, within a millisecond (0.0996 s against 0.1005 s), and
+`@openmw-content` cost what all marked does, within a millisecond (0.0996 s against 0.1005 s), and
 the opens and the master checks ran 1.07x to 1.42x slower. At 11 KB it costs less to compile than
 one open of the order saves, so it stays marked, and no row is more than 5% slower than all marked.

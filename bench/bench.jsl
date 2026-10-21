@@ -1,9 +1,9 @@
 --!strict
--- A load order, timed from Luau the way a tool reaches it: `@load-order` over an `@openmw`
+-- A load order, timed from Luau the way a tool reaches it: `@openmw-content` over an `@openmw-install`
 -- Context for an install the bench writes. It opens the whole order, the order cut to two record
 -- types and to cells without their references, a list of entries a third of which don't open,
 -- and a content list no folder has a file of (which leaves the package's own work, and none of
--- `@tes3`'s or the disk's); finds every plugin's masters in the order, in one list of names, in a
+-- `@esm`'s or the disk's); finds every plugin's masters in the order, in one list of names, in a
 -- list that is another from its first name at every call, and in one that is another only at its
 -- last; and asks where output goes and for an activation the content already has. Run by `jess run --capability filesystem.read --capability
 -- filesystem.write --package . --package ../openmw --package-path .. bench/bench.jsl <scratch>
@@ -11,8 +11,8 @@
 -- one call takes. Every workload's result is compared with what the writer of the install says
 -- it must be, outside the time, so a path that stopped doing the work fails here.
 local fs = require '@dream/fs'
-local loadOrder = require '@load-order'
-local openmw = require '@openmw'
+local loadOrder = require '@openmw-content'
+local openmw = require '@openmw-install'
 
 -- A build without the verified toolchain runs Luau slower than a release does, so a number from
 -- one says nothing about what ships.
